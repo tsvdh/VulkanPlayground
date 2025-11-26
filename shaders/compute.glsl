@@ -1,6 +1,6 @@
 #version 460
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) buffer Data {
     uint data[];
@@ -8,5 +8,5 @@ layout(set = 0, binding = 0) buffer Data {
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    buf.data[index] *= 12;
+    buf.data[index] *= 2;
 }
