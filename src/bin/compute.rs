@@ -30,7 +30,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_items();
+    } = VulkanPlayground::get_common_vulkan_items(None);
 
     let content = 0..NUM_VALUES;
     let buffer = Buffer::from_iter(

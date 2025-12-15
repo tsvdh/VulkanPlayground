@@ -2,14 +2,14 @@ use std::sync::Arc;
 use log::{debug, error, info, warn};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::device::{Device, DeviceCreateInfo, Queue, QueueCreateInfo, QueueFlags};
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::instance::debug::{DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::VulkanLibrary;
 
-const EXTENSIONS: InstanceExtensions = InstanceExtensions {
+const DEFAULT_INSTANCE_EXTENSIONS: InstanceExtensions = InstanceExtensions {
     ext_debug_utils: true,
     ..InstanceExtensions::empty()
 };
@@ -19,7 +19,6 @@ pub struct CommonItems {
     pub library: Arc<VulkanLibrary>,
     pub instance: Arc<Instance>,
     pub debug_callback: DebugUtilsMessenger,
-    pub physical_device: Arc<PhysicalDevice>,
     pub queue_family_index: u32,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
@@ -61,7 +60,10 @@ pub fn get_debug_callback(instance: Arc<Instance>) -> DebugUtilsMessenger {
     }
 }
 
-pub fn get_common_items() -> CommonItems {
+pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
+                               device_extensions: Option<DeviceExtensions>,
+                               queue_flag: QueueFlags
+) -> CommonItems {
     let library = VulkanLibrary::new().expect("No local Vulkan library/dll");
 
     let mut library_layers = library.layer_properties().unwrap();
@@ -74,7 +76,7 @@ pub fn get_common_items() -> CommonItems {
         library.clone(),
         InstanceCreateInfo {
             enabled_layers: LAYERS.iter().map(|l| {l.to_string()}).collect::<Vec<_>>(),
-            enabled_extensions: EXTENSIONS,
+            enabled_extensions: DEFAULT_INSTANCE_EXTENSIONS.union(&instance_extensions.unwrap_or_default()),
             ..Default::default()
         }
     ).expect("Failed to create instance");
@@ -83,6 +85,8 @@ pub fn get_common_items() -> CommonItems {
 
     let physical_device = instance
         .enumerate_physical_devices().unwrap()
+        .filter(|physical_device|
+            physical_device.supported_extensions().contains(&device_extensions.unwrap_or_default()))
         .min_by_key(|physical_device| match physical_device.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
             PhysicalDeviceType::IntegratedGpu => 1,
@@ -92,9 +96,9 @@ pub fn get_common_items() -> CommonItems {
     let queue_family_index = physical_device
         .queue_family_properties().iter().enumerate()
         .position(|(_, queue_family_properties)| {
-            queue_family_properties.queue_flags.contains(QueueFlags::GRAPHICS)
+            queue_family_properties.queue_flags.contains(queue_flag)
         })
-        .expect("No queue with compute support available") as u32;
+        .expect("No queue with appropriate support available") as u32;
 
     let (device, mut queues) = Device::new(
         physical_device.clone(),
@@ -103,6 +107,7 @@ pub fn get_common_items() -> CommonItems {
                 queue_family_index,
                 ..Default::default()
             }],
+            enabled_extensions: device_extensions.unwrap_or_default(),
             ..Default::default()
         }
     ).expect("Failed to create device");
@@ -123,7 +128,6 @@ pub fn get_common_items() -> CommonItems {
         library,
         instance,
         debug_callback,
-        physical_device,
         queue_family_index,
         device,
         queue,

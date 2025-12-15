@@ -16,6 +16,7 @@ use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateInfo};
 use vulkano::render_pass::{Framebuffer, FramebufferCreateFlags, FramebufferCreateInfo, Subpass};
 use vulkano::{single_pass_renderpass, sync};
+use vulkano::device::QueueFlags;
 use vulkano::sync::GpuFuture;
 
 const RESOLUTION: [u32; 2] = [8 * 128, 8 * 128];
@@ -34,14 +35,13 @@ fn main() {
         library: _,
         instance: _,
         debug_callback: _,
-        physical_device: _,
         queue_family_index,
         device,
         queue,
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_items();
+    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS);
 
     let vertex1 = MyVertex { position: [0.5, -0.5]};
     let vertex2 = MyVertex { position: [-0.5, 0.25]};
