@@ -4,6 +4,7 @@ use vulkano::{sync,};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyImageToBufferInfo};
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
+use vulkano::device::QueueFlags;
 use vulkano::format::{Format};
 use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::image::view::ImageView;
@@ -21,14 +22,13 @@ fn main() {
         library: _,
         instance: _,
         debug_callback: _,
-        physical_device: _,
         queue_family_index,
         device,
         queue,
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items();
+    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS);
 
     mod image_shader_module {
         vulkano_shaders::shader!{

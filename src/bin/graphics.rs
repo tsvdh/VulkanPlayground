@@ -29,8 +29,6 @@ struct MyVertex {
 }
 
 fn main() {
-    pretty_env_logger::init();
-
     let VulkanPlayground::CommonItems {
         library: _,
         instance: _,

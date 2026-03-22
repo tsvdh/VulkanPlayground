@@ -151,13 +151,13 @@ fn get_pipeline(device: Arc<Device>,
     ).unwrap()
 }
 
-fn get_command_buffers(
-    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-    queue: Arc<Queue>,
-    pipeline: Arc<GraphicsPipeline>,
-    framebuffers: Vec<Arc<Framebuffer>>,
-    vertex_buffer:
-)
+// fn get_command_buffers(
+//     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+//     queue: Arc<Queue>,
+//     pipeline: Arc<GraphicsPipeline>,
+//     framebuffers: Vec<Arc<Framebuffer>>,
+//     vertex_buffer:
+// )
 
 #[derive(BufferContents, Vertex)]
 #[repr(C)]

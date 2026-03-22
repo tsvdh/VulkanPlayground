@@ -1,3 +1,4 @@
+use std::process::exit;
 use std::time::Instant;
 use log::{info};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -8,29 +9,27 @@ use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint, PipelineLa
 use vulkano::pipeline::compute::ComputePipelineCreateInfo;
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::{sync};
+use vulkano::device::QueueFlags;
 use vulkano::sync::GpuFuture;
 
 const BATCH_SIZE: u32 = 1024;
-const NUM_BATCHES: u32 = 2u32.pow(19);
+const NUM_BATCHES: u32 = 2u32.pow(14);
 const NUM_VALUES: u32 = BATCH_SIZE * NUM_BATCHES;
 
 fn main() {
-    pretty_env_logger::init();
-
     let gpu_setup_start = Instant::now();
 
     let VulkanPlayground::CommonItems {
         library: _,
         instance: _,
         debug_callback: _,
-        physical_device: _,
         queue_family_index,
         device,
         queue,
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::COMPUTE);
 
     let content = 0..NUM_VALUES;
     let buffer = Buffer::from_iter(

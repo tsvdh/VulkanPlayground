@@ -3,7 +3,7 @@ use log::{debug, error, info, warn};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
-use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
+use vulkano::device::physical::{PhysicalDeviceType};
 use vulkano::instance::debug::{DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::StandardMemoryAllocator;
@@ -28,6 +28,8 @@ pub struct CommonItems {
 }
 
 pub fn get_debug_callback(instance: Arc<Instance>) -> DebugUtilsMessenger {
+    pretty_env_logger::init();
+    
     unsafe {
         DebugUtilsMessenger::new(
             instance.clone(),
