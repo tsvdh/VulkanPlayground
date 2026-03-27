@@ -52,19 +52,19 @@ fn main() {
             path: r"shaders\compute.glsl",
         }
     }
-    let shader_module = compute_shader_module::load(device.clone()).expect("Failed to create shader module");
+    let compute_shader_module = compute_shader_module::load(device.clone()).expect("Failed to create shader module");
 
-    let compute_shader = shader_module.entry_point("main").unwrap();
-    let stage = PipelineShaderStageCreateInfo::new(compute_shader);
+    let compute_shader = compute_shader_module.entry_point("main").unwrap();
+    let stage_create_info = PipelineShaderStageCreateInfo::new(compute_shader);
     let pipeline_layout = PipelineLayout::new(
         device.clone(),
-        PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage])
+        PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage_create_info])
             .into_pipeline_layout_create_info(device.clone()).unwrap()
     ).unwrap();
 
     let compute_pipeline = ComputePipeline::new(
         device.clone(), None,
-        ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout)
+        ComputePipelineCreateInfo::stage_layout(stage_create_info, pipeline_layout)
     ).expect("Failed to create compute pipeline");
 
     let pipeline_layout = compute_pipeline.layout();
