@@ -17,8 +17,6 @@ const NUM_BATCHES: u32 = 2u32.pow(14);
 const NUM_VALUES: u32 = BATCH_SIZE * NUM_BATCHES;
 
 fn main() {
-    let gpu_setup_start = Instant::now();
-
     let VulkanPlayground::CommonItems {
         library: _,
         instance: _,
@@ -30,6 +28,8 @@ fn main() {
         descriptor_set_allocator,
         command_buffer_allocator
     } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::COMPUTE);
+
+    let gpu_setup_start = Instant::now();
 
     let content = 0..NUM_VALUES;
     let buffer = Buffer::from_iter(
@@ -64,10 +64,8 @@ fn main() {
 
     let compute_pipeline = ComputePipeline::new(
         device.clone(), None,
-        ComputePipelineCreateInfo::stage_layout(stage_create_info, pipeline_layout)
+        ComputePipelineCreateInfo::stage_layout(stage_create_info, pipeline_layout.clone())
     ).expect("Failed to create compute pipeline");
-
-    let pipeline_layout = compute_pipeline.layout();
 
     let descriptor_set_layouts = pipeline_layout.set_layouts();
     let descriptor_set_layout = descriptor_set_layouts.get(0).unwrap();
