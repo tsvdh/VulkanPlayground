@@ -1,4 +1,5 @@
 use image::{ImageBuffer, Rgba};
+use log::info;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter,};
 use vulkano::{sync,};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -16,8 +17,6 @@ use vulkano::sync::GpuFuture;
 const RESOLUTION: [u32; 2] = [8 * 128, 8 * 128];
 
 fn main() {
-    pretty_env_logger::init();
-
     let VulkanPlayground::CommonItems {
         library: _,
         instance: _,
@@ -33,7 +32,7 @@ fn main() {
     mod image_shader_module {
         vulkano_shaders::shader!{
             ty: "compute",
-            path: r"shaders\image.glsl",
+            path: r"shaders\image_compute.glsl",
         }
     }
     let shader_module = image_shader_module::load(device.clone()).expect("Failed to create shader module");
@@ -48,9 +47,8 @@ fn main() {
 
     let compute_pipeline = ComputePipeline::new(
         device.clone(), None,
-        ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout)
+        ComputePipelineCreateInfo::stage_layout(stage, pipeline_layout.clone())
     ).expect("Failed to create compute pipeline");
-    let pipeline_layout = compute_pipeline.layout();
 
     let image = Image::new(
         memory_allocator.clone(),
@@ -123,5 +121,7 @@ fn main() {
     let image = ImageBuffer::<Rgba<u8>, _>::from_raw(
         RESOLUTION[0], RESOLUTION[1], &buffer_content[..]
     ).unwrap();
-    image.save("image.png").unwrap();
+    image.save("image_compute.png").unwrap();
+
+    info!("Success")
 }

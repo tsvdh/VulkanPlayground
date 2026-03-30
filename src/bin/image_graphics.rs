@@ -1,4 +1,5 @@
 use image::{ImageBuffer, Rgba};
+use log::info;
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyImageToBufferInfo, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
 use vulkano::format::Format;
@@ -13,8 +14,8 @@ use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateInfo};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateFlags, FramebufferCreateInfo, Subpass};
+use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo};
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, Subpass};
 use vulkano::{single_pass_renderpass, sync};
 use vulkano::device::QueueFlags;
 use vulkano::sync::GpuFuture;
@@ -23,7 +24,7 @@ const RESOLUTION: [u32; 2] = [8 * 128, 8 * 128];
 
 #[derive(BufferContents, Vertex)]
 #[repr(C)]
-struct MyVertex {
+struct BasicVertex {
     #[format(R32G32_SFLOAT)]
     position: [f32; 2]
 }
@@ -37,13 +38,16 @@ fn main() {
         device,
         queue,
         memory_allocator,
-        descriptor_set_allocator,
+        descriptor_set_allocator: _,
         command_buffer_allocator
     } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS);
 
-    let vertex1 = MyVertex { position: [0.5, -0.5]};
-    let vertex2 = MyVertex { position: [-0.5, 0.25]};
-    let vertex3 = MyVertex { position: [0.0, 0.5]};
+    let vertex1 = BasicVertex { position: [0.0, -0.5]};
+    let vertex2 = BasicVertex { position: [0.5, 0.0]};
+    let vertex3 = BasicVertex { position: [-0.5, 0.0]};
+    let vertex4 = BasicVertex { position: [0.0, 0.5]};
+    let vertex5 = BasicVertex { position: [-0.5, 0.0]};
+    let vertex6 = BasicVertex { position: [0.5, 0.0]};
 
     let vertex_buffer = Buffer::from_iter(
         memory_allocator.clone(),
@@ -55,7 +59,7 @@ fn main() {
             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        vec![vertex1, vertex2, vertex3]
+        vec![vertex1, vertex2, vertex3, vertex4, vertex5, vertex6]
     ).unwrap();
 
     let render_pass = single_pass_renderpass!(
@@ -114,13 +118,13 @@ fn main() {
     mod vertex_shader_module {
         vulkano_shaders::shader! {
             ty: "vertex",
-            path: "shaders/graphics/shader.vert"
+            path: "shaders/image_graphics/shader.vert"
         }
     }
     mod fragment_shader_module {
         vulkano_shaders::shader! {
             ty: "fragment",
-            path: "shaders/graphics/shader.frag"
+            path: "shaders/image_graphics/shader.frag"
         }
     }
     let vertex_shader_module = vertex_shader_module::load(device.clone()).expect("Failed to create vertex shader");
@@ -134,7 +138,7 @@ fn main() {
         depth_range: 0.0..=1.0
     };
 
-    let vertex_input_state = MyVertex::per_vertex()
+    let vertex_input_state = BasicVertex::per_vertex()
         .definition(&vertex_shader)
         .unwrap();
 
@@ -193,7 +197,7 @@ fn main() {
             ).unwrap()
             .bind_pipeline_graphics(graphics_pipeline.clone()).unwrap()
             .bind_vertex_buffers(0, vertex_buffer.clone()).unwrap()
-            .draw(3, 1, 0, 0).unwrap()
+            .draw(6, 1, 0, 0).unwrap()
             .end_render_pass(SubpassEndInfo::default()).unwrap()
             .copy_image_to_buffer(CopyImageToBufferInfo::image_buffer(image.clone(), buffer.clone())).unwrap();
     }
@@ -207,6 +211,10 @@ fn main() {
     future.wait(None).unwrap();
 
     let buffer_content = buffer.read().unwrap();
-    let image_buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(RESOLUTION[0], RESOLUTION[1], &buffer_content[..]).unwrap();
-    image_buffer.save("image.png").unwrap();
+    let image_buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(
+        RESOLUTION[0], RESOLUTION[1], &buffer_content[..]
+    ).unwrap();
+    image_buffer.save("image_graphics.png").unwrap();
+
+    info!("Success")
 }
