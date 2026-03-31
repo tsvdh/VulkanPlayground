@@ -21,13 +21,12 @@ fn main() {
         library: _,
         instance: _,
         debug_callback: _,
-        queue_family_index,
         device,
         queue,
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::COMPUTE);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::COMPUTE, None);
 
     let gpu_setup_start = Instant::now();
 
@@ -78,7 +77,7 @@ fn main() {
 
     let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
         command_buffer_allocator.clone(),
-        queue_family_index,
+        queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit
     ).unwrap();
 

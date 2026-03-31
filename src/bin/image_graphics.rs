@@ -34,13 +34,12 @@ fn main() {
         library: _,
         instance: _,
         debug_callback: _,
-        queue_family_index,
         device,
         queue,
         memory_allocator,
         descriptor_set_allocator: _,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS, None);
 
     let vertex1 = BasicVertex { position: [0.0, -0.5]};
     let vertex2 = BasicVertex { position: [0.5, 0.0]};
@@ -179,7 +178,7 @@ fn main() {
 
     let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
         command_buffer_allocator.clone(),
-        queue_family_index,
+        queue.queue_family_index(),
         CommandBufferUsage::OneTimeSubmit
     ).unwrap();
 

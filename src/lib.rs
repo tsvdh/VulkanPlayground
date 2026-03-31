@@ -8,6 +8,7 @@ use vulkano::instance::debug::{DebugUtilsMessageSeverity, DebugUtilsMessageType,
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
 use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::VulkanLibrary;
+use winit::event_loop::EventLoop;
 
 const DEFAULT_INSTANCE_EXTENSIONS: InstanceExtensions = InstanceExtensions {
     ext_debug_utils: true,
@@ -19,7 +20,6 @@ pub struct CommonItems {
     pub library: Arc<VulkanLibrary>,
     pub instance: Arc<Instance>,
     pub debug_callback: DebugUtilsMessenger,
-    pub queue_family_index: u32,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
     pub memory_allocator: Arc<StandardMemoryAllocator>,
@@ -64,7 +64,8 @@ pub fn get_debug_callback(instance: Arc<Instance>) -> DebugUtilsMessenger {
 
 pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
                                device_extensions: Option<DeviceExtensions>,
-                               queue_flag: QueueFlags
+                               queue_flag: QueueFlags,
+                               event_loop: Option<&EventLoop<()>>
 ) -> CommonItems {
     let library = VulkanLibrary::new().expect("No local Vulkan library/dll");
 
@@ -97,8 +98,9 @@ pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
 
     let queue_family_index = physical_device
         .queue_family_properties().iter().enumerate()
-        .position(|(_, queue_family_properties)| {
+        .position(|(index, queue_family_properties)| {
             queue_family_properties.queue_flags.contains(queue_flag)
+                && event_loop.is_some_and(|event_loop| physical_device.presentation_support(index as u32, event_loop).unwrap())
         })
         .expect("No queue with appropriate support available") as u32;
 
@@ -130,7 +132,6 @@ pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
         library,
         instance,
         debug_callback,
-        queue_family_index,
         device,
         queue,
         memory_allocator,
