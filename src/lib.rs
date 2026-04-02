@@ -2,7 +2,7 @@ use std::sync::Arc;
 use log::{debug, error, info, warn};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
+use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::device::physical::{PhysicalDeviceType};
 use vulkano::instance::debug::{DebugUtilsMessageSeverity, DebugUtilsMessageType, DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo};
 use vulkano::instance::{Instance, InstanceCreateInfo, InstanceExtensions};
@@ -64,6 +64,7 @@ pub fn get_debug_callback(instance: Arc<Instance>) -> DebugUtilsMessenger {
 
 pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
                                device_extensions: Option<DeviceExtensions>,
+                               device_features: Option<DeviceFeatures>,
                                queue_flag: QueueFlags,
                                event_loop: Option<&EventLoop<()>>
 ) -> CommonItems {
@@ -112,6 +113,7 @@ pub fn get_common_vulkan_items(instance_extensions: Option<InstanceExtensions>,
                 ..Default::default()
             }],
             enabled_extensions: device_extensions.unwrap_or_default(),
+            enabled_features: device_features.unwrap_or_default(),
             ..Default::default()
         }
     ).expect("Failed to create device");

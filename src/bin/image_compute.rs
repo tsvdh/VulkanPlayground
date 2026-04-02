@@ -26,7 +26,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS, None);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, None, QueueFlags::GRAPHICS, None);
 
     mod image_shader_module {
         vulkano_shaders::shader!{

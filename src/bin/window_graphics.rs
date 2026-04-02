@@ -1,6 +1,7 @@
 use std::sync::Arc;
+use log::{info, warn};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::device::{DeviceExtensions, QueueFlags};
+use vulkano::device::{DeviceExtensions, DeviceFeatures, QueueFlags};
 use vulkano::image::{Image, ImageUsage};
 use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
@@ -13,11 +14,11 @@ use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
-use vulkano::swapchain::{acquire_next_image, PresentFuture, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo};
+use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp, Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
+use vulkano::swapchain::{acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::{sync, Validated, VulkanError};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferExecFuture, CommandBufferUsage, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
-use vulkano::sync::future::{FenceSignalFuture, JoinFuture};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, RenderingAttachmentInfo, RenderingInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
+use vulkano::pipeline::graphics::subpass::{PipelineRenderingCreateInfo, PipelineSubpassType};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -34,18 +35,17 @@ fn main() {
 struct App {
     common_items: CommonItems,
     vertex_buffer: Subbuffer<[BasicVertex]>,
-    render_context: Option<RenderContext>
+    render_context: Option<RenderContext>,
 }
 
 struct RenderContext {
     window: Arc<Window>,
     swapchain: Arc<Swapchain>,
-    render_pass: Arc<RenderPass>,
-    framebuffers: Vec<Arc<Framebuffer>>,
+    attachment_image_views: Vec<Arc<ImageView>>,
     pipeline: Arc<GraphicsPipeline>,
     viewport: Viewport,
     recreate_swapchain: bool,
-    previous_frame_end: Option<Box<dyn GpuFuture>>
+    previous_frame_end: Option<Box<dyn GpuFuture>>,
 }
 
 #[derive(BufferContents, Vertex)]
@@ -58,11 +58,20 @@ struct BasicVertex {
 impl App {
     fn new(event_loop: &EventLoop<()>) -> Self {
         let instance_extensions = Surface::required_extensions(event_loop).unwrap();
-        let device_extensions = DeviceExtensions { khr_swapchain: true, ..DeviceExtensions::empty() };
+        let device_extensions = DeviceExtensions {
+            khr_swapchain: true,
+            khr_dynamic_rendering: true,
+            ..DeviceExtensions::empty()
+        };
+        let device_features = DeviceFeatures {
+            dynamic_rendering: true,
+            ..DeviceFeatures::empty()
+        };
 
         let common_items = VulkanPlayground::get_common_vulkan_items(
             Some(instance_extensions),
             Some(device_extensions),
+            Some(device_features),
             QueueFlags::GRAPHICS,
             Some(event_loop)
         );
@@ -84,12 +93,10 @@ impl App {
             vec![vertex1, vertex2, vertex3]
         ).unwrap();
 
-        let render_context = None;
-
         App {
             common_items,
             vertex_buffer,
-            render_context
+            render_context: None
         }
     }
 }
@@ -119,23 +126,7 @@ impl ApplicationHandler for App {
             ).unwrap()
         };
 
-        let render_pass = vulkano::single_pass_renderpass!(
-            self.common_items.device.clone(),
-            attachments: {
-                color: {
-                    format: swapchain.image_format(),
-                    samples: 1,
-                    load_op: Clear,
-                    store_op: Store,
-                }
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {},
-            }
-        ).unwrap();
-
-        let framebuffers = make_framebuffers(&images, render_pass.clone());
+        let attachment_image_views = make_image_views(&images);
 
         let pipeline = {
             mod vertex_shader_module {
@@ -168,7 +159,10 @@ impl ApplicationHandler for App {
                     .into_pipeline_layout_create_info(self.common_items.device.clone()).unwrap()
             ).unwrap();
 
-            let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+            let dynamic_rendering_info = PipelineRenderingCreateInfo {
+                color_attachment_formats: vec![Some(swapchain.image_format())],
+                ..Default::default()
+            };
 
             GraphicsPipeline::new(
                 self.common_items.device.clone(),
@@ -181,11 +175,11 @@ impl ApplicationHandler for App {
                     rasterization_state: Some(RasterizationState::default()),
                     multisample_state: Some(MultisampleState::default()),
                     color_blend_state: Some(ColorBlendState::with_attachment_states(
-                        subpass.num_color_attachments(),
+                        dynamic_rendering_info.color_attachment_formats.len() as u32,
                         ColorBlendAttachmentState::default()
                     )),
                     dynamic_state: [DynamicState::Viewport].into_iter().collect(),
-                    subpass: Some(subpass.into()),
+                    subpass: Some(dynamic_rendering_info.into()),
                     ..GraphicsPipelineCreateInfo::layout(layout.clone())
                 }
             ).unwrap()
@@ -197,24 +191,21 @@ impl ApplicationHandler for App {
             depth_range: 0.0..=1.0
         };
 
-        let recreate_swapchain = false;
-
         let previous_frame_end = Some(sync::now(self.common_items.device.clone()).boxed());
 
         self.render_context = Some(RenderContext {
             window,
             swapchain,
-            render_pass,
-            framebuffers,
+            attachment_image_views,
             pipeline,
             viewport,
-            recreate_swapchain,
-            previous_frame_end
+            recreate_swapchain: false,
+            previous_frame_end,
         });
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-        // ApplicationHandler::resumed is guaranteed to have been called
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        // self.render_context is guaranteed to be Some
         let render_context = self.render_context.as_mut().unwrap();
 
         match event {
@@ -233,6 +224,7 @@ impl ApplicationHandler for App {
                 render_context.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
                 if render_context.recreate_swapchain {
+                    info!("Recreating swapchain");
                     let (new_swapchain, new_images) = render_context.swapchain.recreate(
                         SwapchainCreateInfo {
                             image_extent: new_window_size.into(),
@@ -241,7 +233,7 @@ impl ApplicationHandler for App {
                     ).unwrap();
 
                     render_context.swapchain = new_swapchain;
-                    render_context.framebuffers = make_framebuffers(&new_images, render_context.render_pass.clone());
+                    render_context.attachment_image_views = make_image_views(&new_images);
                     render_context.viewport.extent = new_window_size.into();
                     render_context.recreate_swapchain = false;
                 }
@@ -261,6 +253,8 @@ impl ApplicationHandler for App {
                     return;
                 }
 
+                info!("Executing render pass");
+
                 let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
                     self.common_items.command_buffer_allocator.clone(),
                     self.common_items.queue.queue_family_index(),
@@ -268,13 +262,14 @@ impl ApplicationHandler for App {
                 ).unwrap();
 
                 command_buffer_builder
-                    .begin_render_pass(
-                        RenderPassBeginInfo {
-                            clear_values: vec![Some([0.0, 0.0, 0.0, 1.0].into())],
-                            ..RenderPassBeginInfo::framebuffer(render_context.framebuffers[image_index as usize].clone())
-                        },
-                        SubpassBeginInfo {
-                            contents: SubpassContents::Inline,
+                    .begin_rendering(
+                        RenderingInfo {
+                            color_attachments: vec![Some(RenderingAttachmentInfo {
+                                load_op: AttachmentLoadOp::Clear,
+                                store_op: AttachmentStoreOp::Store,
+                                clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
+                                ..RenderingAttachmentInfo::image_view(render_context.attachment_image_views[image_index as usize].clone())
+                            })],
                             ..Default::default()
                         }
                     ).unwrap()
@@ -287,7 +282,7 @@ impl ApplicationHandler for App {
                 }
 
                 command_buffer_builder
-                    .end_render_pass(SubpassEndInfo::default()).unwrap();
+                    .end_rendering().unwrap();
 
                 let command_buffer = command_buffer_builder.build().unwrap();
 
@@ -302,13 +297,12 @@ impl ApplicationHandler for App {
                     Ok(future) => {
                         render_context.previous_frame_end = Some(future.boxed());
                     }
-                    Err(VulkanError::OutOfDate) => {
-                        render_context.recreate_swapchain = true;
-                        render_context.previous_frame_end = Some(sync::now(self.common_items.device.clone()).boxed());
-                        return;
-                    }
                     Err(error) => {
-                        panic!("Failed to flush future: {error}");
+                        if error == VulkanError::OutOfDate {
+                            render_context.recreate_swapchain = true;
+                        }
+                        render_context.previous_frame_end = Some(sync::now(self.common_items.device.clone()).boxed());
+                        warn!("Rendering failed: {error}");
                     }
                 }
             }
@@ -317,20 +311,13 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        info!("About to wait event, requesting redraw");
         self.render_context.as_mut().unwrap().window.request_redraw();
     }
 }
 
-fn make_framebuffers(images: &[Arc<Image>], render_pass: Arc<RenderPass>) -> Vec<Arc<Framebuffer>> {
+fn make_image_views(images: &[Arc<Image>]) -> Vec<Arc<ImageView>> {
     images.iter().map(|image| {
-        let view = ImageView::new_default(image.clone()).unwrap();
-
-        Framebuffer::new(
-            render_pass.clone(),
-            FramebufferCreateInfo {
-                attachments: vec![view],
-                ..Default::default()
-            }
-        ).unwrap()
+        ImageView::new_default(image.clone()).unwrap()
     }).collect()
 }

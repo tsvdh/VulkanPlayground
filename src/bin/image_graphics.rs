@@ -39,7 +39,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator: _,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::GRAPHICS, None);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, None, QueueFlags::GRAPHICS, None);
 
     let vertex1 = BasicVertex { position: [0.0, -0.5]};
     let vertex2 = BasicVertex { position: [0.5, 0.0]};

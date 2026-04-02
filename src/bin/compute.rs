@@ -26,7 +26,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, QueueFlags::COMPUTE, None);
+    } = VulkanPlayground::get_common_vulkan_items(None, None, None, QueueFlags::COMPUTE, None);
 
     let gpu_setup_start = Instant::now();
 
