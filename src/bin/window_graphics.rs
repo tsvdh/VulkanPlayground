@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 use log::{info, warn};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::device::{DeviceExtensions, DeviceFeatures, QueueFlags};
@@ -14,28 +15,32 @@ use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
 use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo};
-use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp, Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
+use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp};
 use vulkano::swapchain::{acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::{sync, Validated, VulkanError};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, RenderingAttachmentInfo, RenderingInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo};
-use vulkano::pipeline::graphics::subpass::{PipelineRenderingCreateInfo, PipelineSubpassType};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderingAttachmentInfo, RenderingInfo};
+use vulkano::pipeline::graphics::subpass::{PipelineRenderingCreateInfo};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event::{ElementState, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key};
 use winit::window::{Window, WindowId};
 use VulkanPlayground::CommonItems;
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new(&event_loop);
     event_loop.run_app(&mut app).unwrap();
 }
 
 struct App {
     common_items: CommonItems,
-    vertex_buffer: Subbuffer<[BasicVertex]>,
     render_context: Option<RenderContext>,
+    vertex_buffer: Subbuffer<[BasicVertex]>,
+    frame_id: u32,
+    show_frame_times: bool,
 }
 
 struct RenderContext {
@@ -95,15 +100,24 @@ impl App {
 
         App {
             common_items,
+            render_context: None,
             vertex_buffer,
-            render_context: None
+            frame_id: 0,
+            show_frame_times: true,
         }
+    }
+
+    fn frame_logic() {
+
     }
 }
 
 impl ApplicationHandler for App {
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(event_loop.create_window(Window::default_attributes()).unwrap());
+        window.set_title("VulkanPlayground");
+
         let surface = Surface::from_window(self.common_items.instance.clone(), window.clone()).unwrap();
 
         let (swapchain, images) = {
@@ -215,9 +229,25 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(_) => {
                 render_context.recreate_swapchain = true;
             }
+            WindowEvent::KeyboardInput{ device_id: _, event, is_synthetic: _} => {
+                if event.state != ElementState::Pressed || event.repeat == true {
+                    return;
+                }
+
+                match event.logical_key {
+                    Key::Named(name) => {
+
+                    }
+                    Key::Character(char) => {
+                        if char == "t" {
+                            self.show_frame_times = !self.show_frame_times;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             WindowEvent::RedrawRequested => {
                 let new_window_size = render_context.window.inner_size();
-
                 if new_window_size.width == 0 {
                     return;
                 }
@@ -253,7 +283,12 @@ impl ApplicationHandler for App {
                     return;
                 }
 
-                info!("Executing render pass");
+                let logic_start = Instant::now();
+
+                Self::frame_logic();
+
+                let logic_duration = logic_start.elapsed();
+                let render_start = Instant::now();
 
                 let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
                     self.common_items.command_buffer_allocator.clone(),
@@ -305,14 +340,23 @@ impl ApplicationHandler for App {
                         warn!("Rendering failed: {error}");
                     }
                 }
+
+                let render_duration = render_start.elapsed();
+
+                if self.show_frame_times {
+                    info!("Frame {:5}; logic: {:4.1}, render: {:4.1}, total: {:4.1}",
+                        self.frame_id,
+                        logic_duration.as_secs_f32() * 1000.0,
+                        render_duration.as_secs_f32() * 1000.0,
+                        (logic_duration + render_duration).as_secs_f32() * 1000.0);
+                }
+
+                self.frame_id += 1;
+
+                render_context.window.request_redraw();
             }
             _ => {}
         }
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        info!("About to wait event, requesting redraw");
-        self.render_context.as_mut().unwrap().window.request_redraw();
     }
 }
 
