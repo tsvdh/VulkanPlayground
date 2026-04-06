@@ -191,7 +191,7 @@ impl App {
             ).unwrap()
             .set_viewport(0, [render_context.viewport.clone()].into_iter().collect()).unwrap()
             .bind_pipeline_graphics(render_context.pipeline.clone()).unwrap()
-            .bind_vertex_buffers(0, self.logic_items.vertex_buffer.clone()).unwrap();
+            .bind_vertex_buffers(0, self.vertex_buffer.clone()).unwrap();
 
         unsafe {
             command_buffer_builder.draw(3, 1, 0, 0).unwrap();

@@ -1,6 +1,7 @@
 mod logic;
 mod rendering;
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Instant;
 use log::{info};
@@ -17,7 +18,7 @@ use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key};
+use winit::keyboard::{Key, KeyCode};
 use winit::window::{Window, WindowId};
 use VulkanPlayground::CommonItems;
 
@@ -30,6 +31,7 @@ fn main() {
 
 struct App {
     vulkan_items: CommonItems,
+    vertex_buffer: Subbuffer<[BasicVertex]>,
     render_context: Option<RenderContext>,
     logic_items: LogicItems,
 }
@@ -52,9 +54,10 @@ struct BasicVertex {
 }
 
 struct LogicItems {
-    vertex_buffer: Subbuffer<[BasicVertex]>,
     frame_id: i32,
     show_frame_times: bool,
+    keys_pressed: BTreeSet<KeyCode>,
+    keys_down: BTreeSet<KeyCode>,
 }
 
 impl App {
@@ -96,13 +99,15 @@ impl App {
         ).unwrap();
 
         let logic_items = LogicItems {
-                vertex_buffer,
-                frame_id: -1,
-                show_frame_times: true,
+            frame_id: -1,
+            show_frame_times: true,
+            keys_pressed: BTreeSet::new(),
+            keys_down: BTreeSet::new(),
         };
 
         App {
             vulkan_items,
+            vertex_buffer,
             render_context: None,
             logic_items,
         }
@@ -112,7 +117,7 @@ impl App {
 impl ApplicationHandler for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        App::init_render_context(self, event_loop);
+        self.init_render_context(event_loop);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
@@ -123,22 +128,11 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(_) => {
                 self.render_context.as_mut().unwrap().recreate_swapchain = true;
             }
-            WindowEvent::KeyboardInput{ device_id: _, event, is_synthetic: _} => {
-                if event.state != ElementState::Pressed || event.repeat == true {
-                    return;
-                }
+            WindowEvent::MouseInput {device_id: _, state, button} => {
 
-                match event.logical_key {
-                    Key::Named(name) => {
-
-                    }
-                    Key::Character(char) => {
-                        if char == "t" {
-                            self.logic_items.show_frame_times = !self.logic_items.show_frame_times;
-                        }
-                    }
-                    _ => {}
-                }
+            }
+            WindowEvent::KeyboardInput { device_id: _, event, is_synthetic: _} => {
+                self.handle_keyboard_input(event);
             }
             WindowEvent::RedrawRequested => {
                 self.logic_items.frame_id += 1;
@@ -147,7 +141,7 @@ impl ApplicationHandler for App {
                     Ok(result) => result,
                     Err(_) => { return; }
                 };
-                
+
                 let logic_start = Instant::now();
                 self.frame_logic();
                 let logic_duration = logic_start.elapsed();
