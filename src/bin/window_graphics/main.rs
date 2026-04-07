@@ -16,9 +16,9 @@ use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::swapchain::{Surface, Swapchain};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, KeyCode};
+use winit::keyboard::{KeyCode};
 use winit::window::{Window, WindowId};
 use VulkanPlayground::CommonItems;
 
@@ -58,6 +58,7 @@ struct LogicItems {
     show_frame_times: bool,
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
+    previous_frame_logic_start: Option<Instant>,
 }
 
 impl App {
@@ -103,6 +104,7 @@ impl App {
             show_frame_times: true,
             keys_pressed: BTreeSet::new(),
             keys_down: BTreeSet::new(),
+            previous_frame_logic_start: None,
         };
 
         App {
@@ -137,9 +139,9 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 self.logic_items.frame_id += 1;
 
-                let acquire_future = match self.frame_prep().ok_or(0) {
-                    Ok(result) => result,
-                    Err(_) => { return; }
+                let acquire_future = match self.frame_prep() {
+                    Some(result) => result,
+                    None => return
                 };
 
                 let logic_start = Instant::now();
