@@ -5,11 +5,14 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/compute/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/image/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/bla/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/src/compute/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/image/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/bla/target" />
+      <excludeFolder url="file://$MODULE_DIR$/.venv" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.14 (VulkanPlayground)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
