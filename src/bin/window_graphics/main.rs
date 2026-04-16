@@ -1,18 +1,22 @@
 mod logic;
 mod rendering;
+mod shader_modules;
 
+use std::env;
 use std::collections::BTreeSet;
+use std::fs::File;
+use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Instant;
 use log::{info};
-use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
+use obj::{load_obj, Obj, Vertex};
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
 use vulkano::device::{DeviceExtensions, DeviceFeatures, QueueFlags};
-use vulkano::image::{Image};
 use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::graphics::viewport::{Viewport};
 use vulkano::pipeline::{GraphicsPipeline};
-use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::swapchain::{Surface, Swapchain};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
@@ -21,6 +25,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode};
 use winit::window::{Window, WindowId};
 use VulkanPlayground::CommonItems;
+use crate::shader_modules::vertex_shader_module::Data;
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
@@ -31,7 +36,9 @@ fn main() {
 
 struct App {
     vulkan_items: CommonItems,
-    vertex_buffer: Subbuffer<[BasicVertex]>,
+    uniform_buffer_allocator: SubbufferAllocator,
+    vertex_buffer: Subbuffer<[Vertex]>,
+    index_buffer: Subbuffer<[u16]>,
     render_context: Option<RenderContext>,
     logic_items: LogicItems,
 }
@@ -39,18 +46,12 @@ struct App {
 struct RenderContext {
     window: Arc<Window>,
     swapchain: Arc<Swapchain>,
-    attachment_image_views: Vec<Arc<ImageView>>,
+    color_attachment_image_views: Vec<Arc<ImageView>>,
+    depth_attachment_image_view: Arc<ImageView>,
     pipeline: Arc<GraphicsPipeline>,
     viewport: Viewport,
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
-}
-
-#[derive(BufferContents, Vertex)]
-#[repr(C)]
-struct BasicVertex {
-    #[format(R32G32_SFLOAT)]
-    position: [f32; 2]
 }
 
 struct LogicItems {
@@ -59,6 +60,7 @@ struct LogicItems {
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
     previous_frame_logic_start: Option<Instant>,
+    uniform_buffer: Option<Subbuffer<Data>>
 }
 
 impl App {
@@ -82,9 +84,20 @@ impl App {
             Some(event_loop)
         );
 
-        let vertex1 = BasicVertex { position: [0.0, -0.5]};
-        let vertex2 = BasicVertex { position: [0.5, 0.0]};
-        let vertex3 = BasicVertex { position: [-0.5, 0.0]};
+        let uniform_buffer_allocator = SubbufferAllocator::new(
+            vulkan_items.memory_allocator.clone(),
+            SubbufferAllocatorCreateInfo {
+                buffer_usage: BufferUsage::UNIFORM_BUFFER,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            }
+        );
+
+        let working_dir = env::current_dir().unwrap();
+        let obj_path = working_dir.join("resources/bunny_face_normals.obj");
+        info!("Reading object at {:?}", obj_path);
+        let buf_reader = BufReader::new(File::open(obj_path).unwrap());
+        let obj: Obj<Vertex, u16> = load_obj(buf_reader).unwrap();
 
         let vertex_buffer = Buffer::from_iter(
             vulkan_items.memory_allocator.clone(),
@@ -96,20 +109,36 @@ impl App {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
-            vec![vertex1, vertex2, vertex3]
+            obj.vertices
+        ).unwrap();
+
+        let index_buffer = Buffer::from_iter(
+            vulkan_items.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            obj.indices
         ).unwrap();
 
         let logic_items = LogicItems {
             frame_id: -1,
-            show_frame_times: true,
+            show_frame_times: false,
             keys_pressed: BTreeSet::new(),
             keys_down: BTreeSet::new(),
             previous_frame_logic_start: None,
+            uniform_buffer: None,
         };
 
         App {
             vulkan_items,
+            uniform_buffer_allocator,
             vertex_buffer,
+            index_buffer,
             render_context: None,
             logic_items,
         }
@@ -134,11 +163,9 @@ impl ApplicationHandler for App {
 
             }
             WindowEvent::KeyboardInput { device_id: _, event, is_synthetic: _} => {
-                self.handle_keyboard_input(event);
+                self.process_keyboard_input(event);
             }
             WindowEvent::RedrawRequested => {
-                self.logic_items.frame_id += 1;
-
                 let acquire_future = match self.frame_prep() {
                     Some(result) => result,
                     None => return
@@ -153,10 +180,11 @@ impl ApplicationHandler for App {
                 let rendering_duration = rendering_start.elapsed();
 
                 if self.logic_items.show_frame_times {
-                    info!("Frame {:5}; logic: {:4.1}, total: {:4.1}",
+                    info!("Frame {:5}; logic: {:4.1}, rendering: {:4.1}",
                         self.logic_items.frame_id,
                         logic_duration.as_secs_f32() * 1000.0,
-                        rendering_duration.as_secs_f32() * 1000.0,);
+                        rendering_duration.as_secs_f32() * 1000.0,
+                    );
                 }
             }
             _ => {}
@@ -166,10 +194,4 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         self.render_context.as_mut().unwrap().window.request_redraw();
     }
-}
-
-fn make_image_views(images: &[Arc<Image>]) -> Vec<Arc<ImageView>> {
-    images.iter().map(|image| {
-        ImageView::new_default(image.clone()).unwrap()
-    }).collect()
 }

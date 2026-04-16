@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use log::{info, warn};
-use vulkano::image::ImageUsage;
-use vulkano::pipeline::{DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
+use vulkano::pipeline::{DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo};
 use vulkano::pipeline::graphics::color_blend::{ColorBlendAttachmentState, ColorBlendState};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
@@ -14,11 +14,18 @@ use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::swapchain::{acquire_next_image, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::{sync, Validated, VulkanError};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderingAttachmentInfo, RenderingInfo};
+use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
+use vulkano::format::Format;
+use vulkano::image::view::ImageView;
+use vulkano::memory::allocator::AllocationCreateInfo;
+use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp};
 use vulkano::sync::GpuFuture;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
-use crate::{make_image_views, App, BasicVertex, RenderContext};
+use VulkanPlayground::CommonItems;
+use crate::{App, RenderContext};
+use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {
     pub fn init_render_context(&mut self, event_loop: &ActiveEventLoop) {
@@ -47,27 +54,16 @@ impl App {
             ).unwrap()
         };
 
-        let attachment_image_views = make_image_views(&images);
+        let (color_image_views, depth_image_view) = Self::make_image_views(&self.vulkan_items, &images);
 
         let pipeline = {
-            mod vertex_shader_module {
-                vulkano_shaders::shader! {
-                    ty: "vertex",
-                    path: "shaders/window_graphics/shader.vert"
-                }
-            }
-            mod fragment_shader_module {
-                vulkano_shaders::shader! {
-                    ty: "fragment",
-                    path: "shaders/window_graphics/shader.frag"
-                }
-            }
+            
             let vertex_shader_module = vertex_shader_module::load(self.vulkan_items.device.clone()).expect("Failed to create vertex shader");
             let fragment_shader_module = fragment_shader_module::load(self.vulkan_items.device.clone()).expect("Failed to create fragment shader");
             let vertex_shader = vertex_shader_module.entry_point("main").unwrap();
             let fragment_shader = fragment_shader_module.entry_point("main").unwrap();
 
-            let vertex_input_state = BasicVertex::per_vertex().definition(&vertex_shader).unwrap();
+            let vertex_input_state = obj::Vertex::per_vertex().definition(&vertex_shader).unwrap();
 
             let stages = [
                 PipelineShaderStageCreateInfo::new(vertex_shader),
@@ -82,6 +78,7 @@ impl App {
 
             let dynamic_rendering_info = PipelineRenderingCreateInfo {
                 color_attachment_formats: vec![Some(swapchain.image_format())],
+                depth_attachment_format: Some(Format::D16_UNORM),
                 ..Default::default()
             };
 
@@ -94,6 +91,10 @@ impl App {
                     input_assembly_state: Some(InputAssemblyState::default()),
                     viewport_state: Some(ViewportState::default()),
                     rasterization_state: Some(RasterizationState::default()),
+                    depth_stencil_state: Some(DepthStencilState {
+                        depth: Some(DepthState::simple()),
+                        ..Default::default()
+                    }),
                     multisample_state: Some(MultisampleState::default()),
                     color_blend_state: Some(ColorBlendState::with_attachment_states(
                         dynamic_rendering_info.color_attachment_formats.len() as u32,
@@ -117,7 +118,8 @@ impl App {
         self.render_context = Some(RenderContext {
             window,
             swapchain,
-            attachment_image_views,
+            color_attachment_image_views: color_image_views,
+            depth_attachment_image_view: depth_image_view,
             pipeline,
             viewport,
             recreate_swapchain: false,
@@ -144,7 +146,8 @@ impl App {
             ).unwrap();
 
             render_context.swapchain = new_swapchain;
-            render_context.attachment_image_views = make_image_views(&new_images);
+            (render_context.color_attachment_image_views,
+             render_context.depth_attachment_image_view) = Self::make_image_views(&self.vulkan_items, &new_images);
             render_context.viewport.extent = new_window_size.into();
             render_context.recreate_swapchain = false;
         }
@@ -171,6 +174,14 @@ impl App {
         let render_context = self.render_context.as_mut().unwrap();
         let image_index = acquire_future.image_index();
 
+        let descriptor_set_layout = render_context.pipeline.layout().set_layouts()[0].clone();
+        let descriptor_set = DescriptorSet::new(
+            self.vulkan_items.descriptor_set_allocator.clone(),
+            descriptor_set_layout.clone(),
+            [WriteDescriptorSet::buffer(0, self.logic_items.uniform_buffer.as_ref().unwrap().clone())],
+            []
+        ).unwrap();
+
         let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
             self.vulkan_items.command_buffer_allocator.clone(),
             self.vulkan_items.queue.queue_family_index(),
@@ -184,17 +195,25 @@ impl App {
                         load_op: AttachmentLoadOp::Clear,
                         store_op: AttachmentStoreOp::Store,
                         clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
-                        ..RenderingAttachmentInfo::image_view(render_context.attachment_image_views[image_index as usize].clone())
+                        ..RenderingAttachmentInfo::image_view(render_context.color_attachment_image_views[image_index as usize].clone())
                     })],
+                    depth_attachment: Some(RenderingAttachmentInfo {
+                        load_op: AttachmentLoadOp::Clear,
+                        store_op: AttachmentStoreOp::DontCare,
+                        clear_value: Some(1f32.into()),
+                        ..RenderingAttachmentInfo::image_view(render_context.depth_attachment_image_view.clone())
+                    }),
                     ..Default::default()
                 }
             ).unwrap()
             .set_viewport(0, [render_context.viewport.clone()].into_iter().collect()).unwrap()
             .bind_pipeline_graphics(render_context.pipeline.clone()).unwrap()
-            .bind_vertex_buffers(0, self.vertex_buffer.clone()).unwrap();
+            .bind_descriptor_sets(PipelineBindPoint::Graphics, render_context.pipeline.layout().clone(), 0, descriptor_set).unwrap()
+            .bind_vertex_buffers(0, self.vertex_buffer.clone()).unwrap()
+            .bind_index_buffer(self.index_buffer.clone()).unwrap();
 
         unsafe {
-            command_buffer_builder.draw(3, 1, 0, 0).unwrap();
+            command_buffer_builder.draw_indexed(self.index_buffer.len() as u32, 1, 0, 0, 0).unwrap();
         }
 
         command_buffer_builder
@@ -222,4 +241,27 @@ impl App {
             }
         }
     }
+
+    fn make_image_views(vulkan_items: &CommonItems, images: &[Arc<Image>]) -> (Vec<Arc<ImageView>>, Arc<ImageView>) {
+        let color_image_views = images.iter().map(|image| {
+            ImageView::new_default(image.clone()).unwrap()
+        }).collect();
+
+        let depth_image_view = ImageView::new_default(
+            Image::new(
+                vulkan_items.memory_allocator.clone(),
+                ImageCreateInfo {
+                    image_type: ImageType::Dim2d,
+                    format: Format::D16_UNORM,
+                    extent: images[0].extent(),
+                    usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                    ..Default::default()
+                },
+                AllocationCreateInfo::default()
+            ).unwrap()
+        ).unwrap();
+
+        (color_image_views, depth_image_view)
+    }
+
 }

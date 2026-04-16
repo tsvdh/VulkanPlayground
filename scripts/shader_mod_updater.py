@@ -12,7 +12,7 @@ shader_path = shader_path.replace("\\", "/")
 
 rust_file_path = "".join([root, "\\src\\bin\\", shader_path.split("/")[1], "\\shader_modules.rs"])
 
-### update edit id in shader_modules.rs ###
+### update edit_id in shader_modules.rs ###
 
 with open(rust_file_path) as rust_file:
     rust_file_contents = rust_file.readlines()
@@ -48,3 +48,5 @@ pyautogui.write(shader_path)
 time.sleep(0.1)
 pyautogui.press("enter")
 pyautogui.hotkey("ctrl", "f4")
+
+######

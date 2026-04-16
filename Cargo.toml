@@ -10,3 +10,5 @@ pretty_env_logger = "0.5"
 vulkano-shaders = "0.35"
 image = "0.25"
 winit = "0.30"
+obj-rs = { git = "https://github.com/simnalamburt/obj-rs", version = "0.7.4", features = ["vulkano"] }
+glam = "0.32"
