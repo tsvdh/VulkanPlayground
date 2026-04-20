@@ -11,7 +11,7 @@ use vulkano::pipeline::graphics::subpass::PipelineRenderingCreateInfo;
 use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::swapchain::{acquire_next_image, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo};
+use vulkano::swapchain::{acquire_next_image, PresentMode, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::{sync, Validated, VulkanError};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderingAttachmentInfo, RenderingInfo};
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
@@ -21,6 +21,7 @@ use vulkano::memory::allocator::AllocationCreateInfo;
 use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp};
 use vulkano::sync::GpuFuture;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 use VulkanPlayground::CommonItems;
@@ -29,8 +30,10 @@ use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {
     pub fn init_render_context(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes()).unwrap());
-        window.set_title("VulkanPlayground");
+        let window_attributes = Window::default_attributes()
+            .with_title("VulkanPlayground")
+            .with_inner_size(PhysicalSize::new(1280, 960));
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         let surface = Surface::from_window(self.vulkan_items.instance.clone(), window.clone()).unwrap();
 
@@ -49,6 +52,7 @@ impl App {
                     image_format,
                     image_extent: window.inner_size().into(),
                     image_usage: ImageUsage::COLOR_ATTACHMENT,
+                    present_mode: PresentMode::Fifo,
                     ..Default::default()
                 }
             ).unwrap()

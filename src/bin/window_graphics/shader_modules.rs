@@ -2,7 +2,7 @@ pub mod vertex_shader_module {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "shaders/window_graphics/shader.vert",
-        define: [("edit_id", "9x9cxx21-xd11-492e-8b2d-e54a1exex89d")]
+        define: [("edit_id", "1b664xe3-5543-46xe-82dx-e9dex3c8x7ac")]
     }
 }
 

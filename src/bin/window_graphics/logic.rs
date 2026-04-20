@@ -40,17 +40,21 @@ impl App {
         // rotate 90 degrees (pi/2) in 1 sec
         // zoom 1m in sec
 
-        let mut angle_diff = FRAC_PI_2 * frame_duration;
-        if keys_down.contains(&ArrowDown) || keys_down.contains(&ArrowLeft) {
-            angle_diff *= -1.0;
+        let mut vertical_angle_diff = FRAC_PI_2 * frame_duration;
+        let mut horizontal_angle_diff = FRAC_PI_2 * frame_duration;
+        if keys_down.contains(&ArrowDown) {
+            vertical_angle_diff *= -1.0;
+        }
+        if keys_down.contains(&ArrowLeft) {
+            horizontal_angle_diff *= -1.0;
         }
 
         if keys_down.contains(&ArrowUp) || keys_down.contains(&ArrowDown) {
-            self.logic_items.eye_pos = self.logic_items.eye_pos.rotate_axis(self.logic_items.eye_horizon, angle_diff);
+            self.logic_items.eye_pos = self.logic_items.eye_pos.rotate_axis(self.logic_items.eye_horizon, vertical_angle_diff);
         }
         if keys_down.contains(&ArrowLeft) || keys_down.contains(&ArrowRight) {
-            self.logic_items.eye_pos = self.logic_items.eye_pos.rotate_y(angle_diff);
-            self.logic_items.eye_horizon = self.logic_items.eye_horizon.rotate_y(angle_diff);
+            self.logic_items.eye_pos = self.logic_items.eye_pos.rotate_y(horizontal_angle_diff);
+            self.logic_items.eye_horizon = self.logic_items.eye_horizon.rotate_y(horizontal_angle_diff);
         }
 
         let mut distance_diff = 1.0 * frame_duration;
@@ -105,6 +109,7 @@ impl App {
 
         let data = vertex_shader_module::Data {
             mvp: self.make_mvp_matrix().to_cols_array_2d(),
+            light_dir: Vec3::NEG_Y.to_array()
         };
         self.logic_items.uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
         *self.logic_items.uniform_buffer.as_mut().unwrap().write().unwrap() = data;
