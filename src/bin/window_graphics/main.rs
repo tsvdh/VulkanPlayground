@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Instant;
+use glam::Vec3;
 use log::{info};
 use obj::{load_obj, Obj, Vertex};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
@@ -60,7 +61,9 @@ struct LogicItems {
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
     previous_frame_logic_start: Option<Instant>,
-    uniform_buffer: Option<Subbuffer<Data>>
+    uniform_buffer: Option<Subbuffer<Data>>,
+    eye_pos: Vec3,
+    eye_horizon: Vec3,
 }
 
 impl App {
@@ -132,6 +135,8 @@ impl App {
             keys_down: BTreeSet::new(),
             previous_frame_logic_start: None,
             uniform_buffer: None,
+            eye_pos: Vec3::NEG_Z,
+            eye_horizon: Vec3::X,
         };
 
         App {
