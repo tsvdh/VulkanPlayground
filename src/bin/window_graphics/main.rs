@@ -3,13 +3,13 @@ mod rendering;
 mod shader_modules;
 
 use std::env;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use glam::Vec3;
-use log::{info};
+use log::{error, info};
 use obj::{load_obj, Obj, Vertex};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
@@ -21,7 +21,6 @@ use vulkano::pipeline::{GraphicsPipeline};
 use vulkano::swapchain::{Surface, Swapchain};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
 use winit::event::{WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode};
@@ -61,10 +60,11 @@ struct LogicItems {
     show_frame_times: bool,
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
-    previous_frame_logic_start: Option<Instant>,
+    frame_start_moments: VecDeque<Instant>,
     uniform_buffer: Option<Subbuffer<Data>>,
     eye_pos: Vec3,
     eye_horizon: Vec3,
+    min_frame_duration: Duration,
 }
 
 impl App {
@@ -134,10 +134,11 @@ impl App {
             show_frame_times: false,
             keys_pressed: BTreeSet::new(),
             keys_down: BTreeSet::new(),
-            previous_frame_logic_start: None,
+            frame_start_moments: VecDeque::new(),
             uniform_buffer: None,
             eye_pos: Vec3::NEG_Z,
             eye_horizon: Vec3::X,
+            min_frame_duration: Duration::from_secs_f32(1.0 / 60.0),
         };
 
         App {
@@ -172,9 +173,13 @@ impl ApplicationHandler for App {
                 self.process_keyboard_input(event);
             }
             WindowEvent::RedrawRequested => {
-                let acquire_future = match self.frame_prep() {
+                if !self.new_frame_start() {
+                    return
+                }
+
+                let acquire_future = match self.frame_rendering_prep() {
+                    None => return,
                     Some(result) => result,
-                    None => return
                 };
 
                 let logic_start = Instant::now();

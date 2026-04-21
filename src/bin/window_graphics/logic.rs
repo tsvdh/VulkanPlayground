@@ -1,7 +1,7 @@
 use std::f32::consts::FRAC_PI_2;
 use std::time::Instant;
 use glam::{Mat4, Vec3};
-use log::info;
+use log::{error, info};
 use winit::event::{KeyEvent};
 use winit::keyboard::{PhysicalKey};
 use winit::keyboard::KeyCode::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, KeyT, PageDown, PageUp};
@@ -67,16 +67,32 @@ impl App {
         }
     }
 
-    fn get_frame_duration(&mut self) -> Option<f32> {
-        if self.logic_items.previous_frame_logic_start.is_none() {
-            self.logic_items.previous_frame_logic_start = Some(Instant::now());
-            return None;
+    fn get_frame_duration(&mut self) -> f32 {
+        if self.logic_items.frame_start_moments.len() != 2 {
+            panic!("Not enough frame moments in queue");
+        }
+        let back = *self.logic_items.frame_start_moments.back().unwrap();
+        let front = *self.logic_items.frame_start_moments.front().unwrap();
+        (back - front).as_secs_f32()
+    }
+
+    pub fn new_frame_start(&mut self) -> bool {
+        let frame_start_moments = &mut self.logic_items.frame_start_moments;
+        let now = Instant::now();
+
+        if frame_start_moments.is_empty() {
+            frame_start_moments.push_back(now - self.logic_items.min_frame_duration);
+            frame_start_moments.push_back(now);
+            return true;
         }
 
-        let frame_duration = self.logic_items.previous_frame_logic_start.unwrap().elapsed().as_secs_f32();
-        self.logic_items.previous_frame_logic_start = Some(Instant::now());
+        if now.duration_since(*frame_start_moments.back().unwrap()) > self.logic_items.min_frame_duration {
+            frame_start_moments.push_back(now);
+            frame_start_moments.pop_front();
+            return true;
+        }
 
-        Some(frame_duration)
+        false
     }
 
     fn make_mvp_matrix(&self) -> Mat4 {
@@ -103,7 +119,7 @@ impl App {
     pub fn frame_logic(&mut self) {
         self.logic_items.frame_id += 1;
 
-        let frame_duration = self.get_frame_duration().unwrap_or(0.001);
+        let frame_duration = self.get_frame_duration();
 
         self.handle_input(frame_duration);
 

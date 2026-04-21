@@ -52,7 +52,7 @@ impl App {
                     image_format,
                     image_extent: window.inner_size().into(),
                     image_usage: ImageUsage::COLOR_ATTACHMENT,
-                    present_mode: PresentMode::Fifo,
+                    present_mode: PresentMode::Mailbox,
                     ..Default::default()
                 }
             ).unwrap()
@@ -131,7 +131,7 @@ impl App {
         });
     }
 
-    pub fn frame_prep(&mut self) -> Option<SwapchainAcquireFuture> {
+    pub fn frame_rendering_prep(&mut self) -> Option<SwapchainAcquireFuture> {
         let render_context = self.render_context.as_mut().unwrap();
 
         let new_window_size = render_context.window.inner_size();
