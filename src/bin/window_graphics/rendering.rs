@@ -182,7 +182,10 @@ impl App {
         let descriptor_set = DescriptorSet::new(
             self.vulkan_items.descriptor_set_allocator.clone(),
             descriptor_set_layout.clone(),
-            [WriteDescriptorSet::buffer(0, self.logic_items.uniform_buffer.as_ref().unwrap().clone())],
+            [
+                WriteDescriptorSet::buffer(0, self.logic_items.vertex_shader_uniform_buffer.as_ref().unwrap().clone()),
+                WriteDescriptorSet::buffer(1, self.logic_items.fragment_shader_uniform_buffer.as_ref().unwrap().clone())
+            ],
             []
         ).unwrap();
 

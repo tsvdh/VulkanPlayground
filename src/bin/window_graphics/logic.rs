@@ -6,7 +6,7 @@ use winit::event::{KeyEvent};
 use winit::keyboard::{PhysicalKey};
 use winit::keyboard::KeyCode::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, KeyT, PageDown, PageUp};
 use crate::{App};
-use crate::shader_modules::vertex_shader_module;
+use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {
 
@@ -38,7 +38,7 @@ impl App {
 
         // camera controls
         // rotate 90 degrees (pi/2) in 1 sec
-        // zoom 1m in sec
+        // zoom 1m in 1 sec
 
         let mut vertical_angle_diff = FRAC_PI_2 * frame_duration;
         let mut horizontal_angle_diff = FRAC_PI_2 * frame_duration;
@@ -122,13 +122,21 @@ impl App {
         let frame_duration = self.get_frame_duration();
 
         self.handle_input(frame_duration);
+        
+        
 
-        let data = vertex_shader_module::Data {
+        let vertex_data = vertex_shader_module::VertexData {
             mvp: self.make_mvp_matrix().to_cols_array_2d(),
-            light_dir: Vec3::NEG_Y.to_array()
         };
-        self.logic_items.uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
-        *self.logic_items.uniform_buffer.as_mut().unwrap().write().unwrap() = data;
+        self.logic_items.vertex_shader_uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
+        *self.logic_items.vertex_shader_uniform_buffer.as_mut().unwrap().write().unwrap() = vertex_data;
+        
+        let fragment_data = fragment_shader_module::FragmentData {
+            light_pos: self.logic_items.light_pos.to_array().into(),
+            eye_pos: self.logic_items.eye_pos.to_array(),
+        };
+        self.logic_items.fragment_shader_uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
+        *self.logic_items.fragment_shader_uniform_buffer.as_mut().unwrap().write().unwrap() = fragment_data;
 
         self.logic_items.keys_pressed.clear();
     }

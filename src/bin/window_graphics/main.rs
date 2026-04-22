@@ -9,7 +9,7 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use glam::Vec3;
-use log::{error, info};
+use log::{info};
 use obj::{load_obj, Obj, Vertex};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
@@ -26,7 +26,8 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode};
 use winit::window::{Window, WindowId};
 use VulkanPlayground::CommonItems;
-use crate::shader_modules::vertex_shader_module::Data;
+use crate::shader_modules::vertex_shader_module::VertexData;
+use crate::shader_modules::fragment_shader_module::FragmentData;
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();
@@ -58,13 +59,15 @@ struct RenderContext {
 struct LogicItems {
     frame_id: i32,
     show_frame_times: bool,
+    min_frame_duration: Duration,
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
     frame_start_moments: VecDeque<Instant>,
-    uniform_buffer: Option<Subbuffer<Data>>,
+    vertex_shader_uniform_buffer: Option<Subbuffer<VertexData>>,
+    fragment_shader_uniform_buffer: Option<Subbuffer<FragmentData>>,
     eye_pos: Vec3,
     eye_horizon: Vec3,
-    min_frame_duration: Duration,
+    light_pos: Vec3,
 }
 
 impl App {
@@ -132,13 +135,15 @@ impl App {
         let logic_items = LogicItems {
             frame_id: -1,
             show_frame_times: false,
+            min_frame_duration: Duration::from_secs_f32(1.0 / 60.0),
             keys_pressed: BTreeSet::new(),
             keys_down: BTreeSet::new(),
             frame_start_moments: VecDeque::new(),
-            uniform_buffer: None,
-            eye_pos: Vec3::NEG_Z,
+            vertex_shader_uniform_buffer: None,
+            fragment_shader_uniform_buffer: None,
+            eye_pos: Vec3::new(0.0, 0.0, -1.5),
             eye_horizon: Vec3::X,
-            min_frame_duration: Duration::from_secs_f32(1.0 / 60.0),
+            light_pos: Vec3::new(0.0, 10.0, 0.0),
         };
 
         App {
