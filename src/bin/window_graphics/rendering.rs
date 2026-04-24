@@ -7,7 +7,7 @@ use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::multisample::MultisampleState;
 use vulkano::pipeline::graphics::rasterization::RasterizationState;
-use vulkano::pipeline::graphics::subpass::PipelineRenderingCreateInfo;
+use vulkano::pipeline::graphics::subpass::{PipelineRenderingCreateInfo};
 use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
@@ -21,20 +21,13 @@ use vulkano::memory::allocator::AllocationCreateInfo;
 use vulkano::pipeline::graphics::depth_stencil::{DepthState, DepthStencilState};
 use vulkano::render_pass::{AttachmentLoadOp, AttachmentStoreOp};
 use vulkano::sync::GpuFuture;
-use winit::dpi::PhysicalSize;
-use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 use VulkanPlayground::CommonItems;
 use crate::{App, RenderContext};
 use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {
-    pub fn init_render_context(&mut self, event_loop: &ActiveEventLoop) {
-        let window_attributes = Window::default_attributes()
-            .with_title("VulkanPlayground")
-            .with_inner_size(PhysicalSize::new(1280, 960));
-        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-
+    pub fn init_render_context(&mut self, window: Arc<Window>) {
         let surface = Surface::from_window(self.vulkan_items.instance.clone(), window.clone()).unwrap();
 
         let (swapchain, images) = {
@@ -177,6 +170,7 @@ impl App {
     pub fn frame_render(&mut self, acquire_future: SwapchainAcquireFuture) {
         let render_context = self.render_context.as_mut().unwrap();
         let image_index = acquire_future.image_index();
+        let image_view = render_context.color_attachment_image_views[image_index as usize].clone();
 
         let descriptor_set_layout = render_context.pipeline.layout().set_layouts()[0].clone();
         let descriptor_set = DescriptorSet::new(
@@ -202,7 +196,7 @@ impl App {
                         load_op: AttachmentLoadOp::Clear,
                         store_op: AttachmentStoreOp::Store,
                         clear_value: Some([0.0, 0.0, 0.0, 1.0].into()),
-                        ..RenderingAttachmentInfo::image_view(render_context.color_attachment_image_views[image_index as usize].clone())
+                        ..RenderingAttachmentInfo::image_view(image_view.clone())
                     })],
                     depth_attachment: Some(RenderingAttachmentInfo {
                         load_op: AttachmentLoadOp::Clear,
@@ -228,14 +222,17 @@ impl App {
 
         let command_buffer = command_buffer_builder.build().unwrap();
 
-        let future = render_context.previous_frame_end.take().unwrap()
+        let scene_future = render_context.previous_frame_end.take().unwrap()
             .join(acquire_future)
-            .then_execute(self.vulkan_items.queue.clone(), command_buffer.clone()).unwrap()
+            .then_execute(self.vulkan_items.queue.clone(), command_buffer.clone()).unwrap();
+
+        let complete_future = self.egui.as_mut().unwrap()
+            .draw_on_image(scene_future, image_view.clone())
             .then_swapchain_present(self.vulkan_items.queue.clone(),
                                     SwapchainPresentInfo::swapchain_image_index(render_context.swapchain.clone(), image_index))
             .then_signal_fence_and_flush();
 
-        match future.map_err(Validated::unwrap) {
+        match complete_future.map_err(Validated::unwrap) {
             Ok(future) => {
                 render_context.previous_frame_end = Some(future.boxed());
             }

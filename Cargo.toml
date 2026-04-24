@@ -12,3 +12,5 @@ image = "0.25"
 winit = "0.30"
 obj-rs = { git = "https://github.com/simnalamburt/obj-rs", version = "0.7.4", features = ["vulkano"] }
 glam = "0.32"
+egui = "0.31"
+egui_winit_vulkano = "0.28"

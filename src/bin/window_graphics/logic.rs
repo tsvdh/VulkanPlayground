@@ -5,7 +5,7 @@ use log::{error, info};
 use winit::event::{KeyEvent};
 use winit::keyboard::{PhysicalKey};
 use winit::keyboard::KeyCode::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, KeyT, PageDown, PageUp};
-use crate::{App};
+use crate::{App, LogicItems};
 use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {

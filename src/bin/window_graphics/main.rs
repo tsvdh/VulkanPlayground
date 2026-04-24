@@ -1,6 +1,7 @@
 mod logic;
 mod rendering;
 mod shader_modules;
+mod ui;
 
 use std::env;
 use std::collections::{BTreeSet, VecDeque};
@@ -8,6 +9,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use egui_winit_vulkano::{Gui};
 use glam::Vec3;
 use log::{info};
 use obj::{load_obj, Obj, Vertex};
@@ -21,6 +23,7 @@ use vulkano::pipeline::{GraphicsPipeline};
 use vulkano::swapchain::{Surface, Swapchain};
 use vulkano::sync::GpuFuture;
 use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
 use winit::event::{WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode};
@@ -43,6 +46,7 @@ struct App {
     index_buffer: Subbuffer<[u16]>,
     render_context: Option<RenderContext>,
     logic_items: LogicItems,
+    egui: Option<Gui>,
 }
 
 struct RenderContext {
@@ -153,6 +157,7 @@ impl App {
             index_buffer,
             render_context: None,
             logic_items,
+            egui: None,
         }
     }
 }
@@ -160,10 +165,20 @@ impl App {
 impl ApplicationHandler for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.init_render_context(event_loop);
+        let window_attributes = Window::default_attributes()
+            .with_title("VulkanPlayground")
+            .with_inner_size(PhysicalSize::new(1280, 960));
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+
+        self.init_render_context(window.clone());
+        self.init_egui(event_loop);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        if self.egui.as_mut().unwrap().update(&event) {
+            return;
+        }
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -187,6 +202,10 @@ impl ApplicationHandler for App {
                     Some(result) => result,
                 };
 
+                let ui_start = Instant::now();
+                self.build_ui();
+                let ui_duration = ui_start.elapsed();
+
                 let logic_start = Instant::now();
                 self.frame_logic();
                 let logic_duration = logic_start.elapsed();
@@ -196,8 +215,9 @@ impl ApplicationHandler for App {
                 let rendering_duration = rendering_start.elapsed();
 
                 if self.logic_items.show_frame_times {
-                    info!("Frame {:5}; logic: {:4.1}, rendering: {:4.1}",
+                    info!("Frame {:5}; ui: {:4.1}, logic: {:4.1}, rendering: {:4.1}",
                         self.logic_items.frame_id,
+                        ui_duration.as_secs_f32() * 1000.0,
                         logic_duration.as_secs_f32() * 1000.0,
                         rendering_duration.as_secs_f32() * 1000.0,
                     );
