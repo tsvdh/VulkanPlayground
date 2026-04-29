@@ -12,7 +12,7 @@ use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
 use vulkano::swapchain::{acquire_next_image, PresentMode, Surface, Swapchain, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo};
-use vulkano::{sync, Validated, VulkanError};
+use vulkano::{Validated, VulkanError};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderingAttachmentInfo, RenderingInfo};
 use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
 use vulkano::format::Format;
@@ -110,8 +110,6 @@ impl App {
             depth_range: 0.0..=1.0
         };
 
-        let previous_frame_end = Some(sync::now(self.vulkan_items.device.clone()).boxed());
-
         self.render_context = Some(RenderContext {
             window,
             swapchain,
@@ -120,7 +118,7 @@ impl App {
             pipeline,
             viewport,
             recreate_swapchain: false,
-            previous_frame_end,
+            previous_frame_end: None,
         });
     }
 
@@ -131,7 +129,9 @@ impl App {
         if new_window_size.width == 0 {
             return None;
         }
-        render_context.previous_frame_end.as_mut().unwrap().cleanup_finished();
+        if render_context.previous_frame_end.is_some() {
+            render_context.previous_frame_end.as_mut().unwrap().cleanup_finished();
+        }
 
         if render_context.recreate_swapchain {
             info!("Recreating swapchain");
@@ -222,8 +222,7 @@ impl App {
 
         let command_buffer = command_buffer_builder.build().unwrap();
 
-        let scene_future = render_context.previous_frame_end.take().unwrap()
-            .join(acquire_future)
+        let scene_future = acquire_future
             .then_execute(self.vulkan_items.queue.clone(), command_buffer.clone()).unwrap();
 
         let complete_future = self.egui.as_mut().unwrap()
@@ -234,13 +233,14 @@ impl App {
 
         match complete_future.map_err(Validated::unwrap) {
             Ok(future) => {
-                render_context.previous_frame_end = Some(future.boxed());
+                render_context.previous_frame_end = Some(future);
             }
             Err(error) => {
                 if error == VulkanError::OutOfDate {
                     render_context.recreate_swapchain = true;
                 }
-                render_context.previous_frame_end = Some(sync::now(self.vulkan_items.device.clone()).boxed());
+                render_context.previous_frame_end = None;
+
                 warn!("Rendering failed: {error}");
             }
         }

@@ -78,13 +78,21 @@ impl App {
 
     pub fn new_frame_start(&mut self) -> bool {
         let frame_start_moments = &mut self.logic_items.frame_start_moments;
-        let now = Instant::now();
 
-        if frame_start_moments.is_empty() {
-            frame_start_moments.push_back(now - self.logic_items.min_frame_duration);
-            frame_start_moments.push_back(now);
-            return true;
+        let previous_frame_end = &self.render_context.as_ref().unwrap().previous_frame_end;
+        if previous_frame_end.is_some() {
+            if !previous_frame_end.as_ref().unwrap().is_signaled().unwrap() {
+                return false;
+            }
+            if self.durations.render_duration.is_none() {
+                self.durations.render_duration = Some(self.durations.rendering_start.unwrap().elapsed());
+            }
+            if self.durations.total_duration.is_none() {
+                self.durations.total_duration = Some(frame_start_moments.back().unwrap().elapsed())
+            }
         }
+
+        let now = Instant::now();
 
         if now.duration_since(*frame_start_moments.back().unwrap()) > self.logic_items.min_frame_duration {
             frame_start_moments.push_back(now);
@@ -117,13 +125,9 @@ impl App {
     }
 
     pub fn frame_logic(&mut self) {
-        self.logic_items.frame_id += 1;
-
         let frame_duration = self.get_frame_duration();
 
         self.handle_input(frame_duration);
-        
-        
 
         let vertex_data = vertex_shader_module::VertexData {
             mvp: self.make_mvp_matrix().to_cols_array_2d(),
