@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectTasksOptions">
     <TaskOptions isEnabled="true">
-      <option name="arguments" value="C:\Users\tsvdh\CodeProjects\RustRover\VulkanPlayground\scripts\shader_mod_updater.py $ContentRoot$ $FilePathRelativeToProjectRoot$" />
+      <option name="arguments" value="C:\Users\tsvdh\CodeProjects\RustRover\vulkan_playground\scripts\shader_mod_updater.py $ContentRoot$ $FilePathRelativeToProjectRoot$" />
       <option name="checkSyntaxErrors" value="true" />
       <option name="description" />
       <option name="exitCodeBehavior" value="ERROR" />
