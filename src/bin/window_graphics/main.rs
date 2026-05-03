@@ -3,12 +3,14 @@ mod rendering;
 mod shader_modules;
 mod ui;
 
-use std::env;
+use std::{env, thread};
 use std::collections::{BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use egui_winit_vulkano::{Gui};
 use glam::Vec3;
@@ -30,7 +32,7 @@ use winit::event::{WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode};
 use winit::window::{Window, WindowId};
-use VulkanPlayground::CommonItems;
+use vulkan_playground::CommonItems;
 use crate::shader_modules::vertex_shader_module::VertexData;
 use crate::shader_modules::fragment_shader_module::FragmentData;
 
@@ -49,7 +51,8 @@ struct App {
     render_context: Option<RenderContext>,
     logic_items: LogicItems,
     egui: Option<Gui>,
-    durations: Durations
+    frame_duration: FrameDuration,
+    test: Arc<bool>,
 }
 
 struct RenderContext {
@@ -60,7 +63,7 @@ struct RenderContext {
     pipeline: Arc<GraphicsPipeline>,
     viewport: Viewport,
     recreate_swapchain: bool,
-    previous_frame_end: Option<FenceSignalFuture<PresentFuture<Box<dyn GpuFuture>>>>,
+    previous_frame_render_end: Option<FenceSignalFuture<PresentFuture<Box<dyn GpuFuture>>>>,
 }
 
 struct LogicItems {
@@ -70,30 +73,32 @@ struct LogicItems {
     keys_pressed: BTreeSet<KeyCode>,
     keys_down: BTreeSet<KeyCode>,
     frame_start_moments: VecDeque<Instant>,
-    vertex_shader_uniform_buffer: Option<Subbuffer<VertexData>>,
-    fragment_shader_uniform_buffer: Option<Subbuffer<FragmentData>>,
+    vertex_shader_uniform_buffers: Vec<Subbuffer<VertexData>>,
+    fragment_shader_uniform_buffers: Vec<Subbuffer<FragmentData>>,
     eye_pos: Vec3,
     eye_horizon: Vec3,
     light_pos: Vec3,
+    // previous_frame_logic_end: Option<bool>,
+    async_duration_tracker: Option<JoinHandle<()>>,
 }
 
-struct Durations {
-    ui_duration: Option<Duration>,
+struct FrameDuration {
     logic_duration: Option<Duration>,
-    rendering_start: Option<Instant>,
-    render_duration: Option<Duration>,
-    total_duration: Option<Duration>,
+    ui_duration: Option<Duration>,
+    render_cpu_duration: Option<Duration>,
+    render_gpu_duration: Option<Duration>,
+    frame_prep_duration: Option<Duration>,
 }
 
-impl Durations {
+impl FrameDuration {
 
     fn empty() -> Self {
-        Durations {
-            ui_duration: None,
+        FrameDuration {
             logic_duration: None,
-            rendering_start: None,
-            render_duration: None,
-            total_duration: None,
+            ui_duration: None,
+            render_cpu_duration: None,
+            render_gpu_duration: None,
+            frame_prep_duration: None,
         }
     }
 
@@ -105,13 +110,14 @@ impl Durations {
     }
 }
 
-impl Display for Durations {
+impl Display for FrameDuration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ui: {}, logic: {}, rendering: {}, total: {}",
+        write!(f, "prep: {}, render_cpu: {}, ui: {}, logic: {}, render_gpu: {}",
+               Self::display_duration(self.frame_prep_duration),
+               Self::display_duration(self.render_cpu_duration),
                Self::display_duration(self.ui_duration),
                Self::display_duration(self.logic_duration),
-               Self::display_duration(self.render_duration),
-               Self::display_duration(self.total_duration),
+               Self::display_duration(self.render_gpu_duration),
         )
     }
 }
@@ -129,7 +135,7 @@ impl App {
             ..DeviceFeatures::empty()
         };
 
-        let vulkan_items = VulkanPlayground::get_common_vulkan_items(
+        let vulkan_items = vulkan_playground::get_common_vulkan_items(
             Some(instance_extensions),
             Some(device_extensions),
             Some(device_features),
@@ -192,14 +198,14 @@ impl App {
             keys_pressed: BTreeSet::new(),
             keys_down: BTreeSet::new(),
             frame_start_moments,
-            vertex_shader_uniform_buffer: None,
-            fragment_shader_uniform_buffer: None,
+            vertex_shader_uniform_buffers: Vec::new(),
+            fragment_shader_uniform_buffers: Vec::new(),
             eye_pos: Vec3::new(0.0, 0.0, -1.5),
             eye_horizon: Vec3::X,
             light_pos: Vec3::new(0.0, 10.0, 0.0),
+            // previous_frame_logic_end: None,
+            async_duration_tracker: None,
         };
-
-        let durations = Durations::empty();
 
         App {
             vulkan_items,
@@ -209,8 +215,12 @@ impl App {
             render_context: None,
             logic_items,
             egui: None,
-            durations
+            frame_duration: FrameDuration::empty(),
         }
+    }
+
+    fn do_logic(&mut self, logic_image_index: u32) {
+        self.frame_logic(logic_image_index);
     }
 }
 
@@ -223,7 +233,26 @@ impl ApplicationHandler for App {
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         self.init_render_context(window.clone());
+        if self.render_context.as_ref().unwrap().swapchain.image_count() != 2 {
+            panic!("Swapchain should contain exactly two images");
+        }
+
         self.init_egui(event_loop);
+
+        // first frame render prep
+        self.build_ui();
+        for i in 0..=1 {
+            self.frame_logic(i);
+        }
+
+        let bla = self.test.clone();
+
+        self.logic_items.async_duration_tracker = Some(thread::spawn(move || {
+            if bla.as_ref() == &true {
+
+            }
+            thread::sleep(Duration::from_micros(50));
+        }));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
@@ -238,7 +267,7 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(_) => {
                 self.render_context.as_mut().unwrap().recreate_swapchain = true;
             }
-            WindowEvent::MouseInput {device_id: _, state, button} => {
+            WindowEvent::MouseInput {device_id: _, state: _, button: _} => {
 
             }
             WindowEvent::KeyboardInput { device_id: _, event, is_synthetic: _} => {
@@ -249,10 +278,12 @@ impl ApplicationHandler for App {
                     return
                 }
 
+                let frame_prep_start = Instant::now();
+
                 if self.logic_items.show_frame_times {
-                    info!("Frame {:5} | {}", self.logic_items.frame_id, self.durations)
+                    info!("Frame {:5} | {}", self.logic_items.frame_id, self.frame_duration)
                 }
-                self.durations = Durations::empty();
+                self.frame_duration = FrameDuration::empty();
                 self.logic_items.frame_id += 1;
 
                 // new frame start
@@ -261,17 +292,22 @@ impl ApplicationHandler for App {
                     None => return,
                     Some(result) => result,
                 };
+                let logic_image_index = (acquire_future.image_index() + 1) % 2;
+                self.frame_duration.frame_prep_duration = Some(frame_prep_start.elapsed());
+
+                let render_cpu_start = Instant::now();
+                self.frame_render(acquire_future);
+                self.frame_duration.render_cpu_duration = Some(render_cpu_start.elapsed());
 
                 let ui_start = Instant::now();
                 self.build_ui();
-                self.durations.ui_duration = Some(ui_start.elapsed());
+                self.frame_duration.ui_duration = Some(ui_start.elapsed());
 
                 let logic_start = Instant::now();
-                self.frame_logic();
-                self.durations.logic_duration = Some(logic_start.elapsed());
+                self.do_logic(logic_image_index);
+                self.frame_duration.logic_duration = Some(logic_start.elapsed());
 
-                self.durations.rendering_start = Some(Instant::now());
-                self.frame_render(acquire_future);
+                // self.logic_items.previous_frame_logic_end = Some(true);
             }
             _ => {}
         }

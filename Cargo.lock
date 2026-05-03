@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "VulkanPlayground"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_winit_vulkano",
- "glam",
- "image",
- "log",
- "obj-rs",
- "pretty_env_logger",
- "vulkano",
- "vulkano-shaders",
- "winit",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2750,6 +2734,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3859da4d7b98bec73e68fb65815d47a263819c415c90eed42b80440a02cbce8c"
 dependencies = [
  "xml-rs",
+]
+
+[[package]]
+name = "vulkan_playground"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_winit_vulkano",
+ "glam",
+ "image",
+ "log",
+ "obj-rs",
+ "pretty_env_logger",
+ "vulkano",
+ "vulkano-shaders",
+ "winit",
 ]
 
 [[package]]

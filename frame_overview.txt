@@ -1,0 +1,35 @@
+frame_durations: VecDeque[2]
+frame_id
+frame_start_moments: VecDeque[2]
+
+A
+
+B (0)
+|
+|
+|
+|
+|
+
+C (1)
+| check if previous frame render is done
+|   set frame_durations[B].render
+| check if previous frame logic is done
+|   set frame_durations[B].logic
+|
+| if not both done
+|   return
+|
+| if min time not elapsed
+|   return
+|
+| update frame_start_moments
+|
+| display frame_durations[B]
+| remove frame_durations[B]
+| add frame_durations[C]
+|
+| set frame_id to C
+| start render for C
+| start logic for C
+

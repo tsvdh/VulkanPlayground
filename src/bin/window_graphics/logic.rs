@@ -1,11 +1,11 @@
 use std::f32::consts::FRAC_PI_2;
 use std::time::Instant;
 use glam::{Mat4, Vec3};
-use log::{error, info};
+use vulkano::sync::GpuFuture;
 use winit::event::{KeyEvent};
 use winit::keyboard::{PhysicalKey};
 use winit::keyboard::KeyCode::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, KeyT, PageDown, PageUp};
-use crate::{App, LogicItems};
+use crate::{App};
 use crate::shader_modules::{fragment_shader_module, vertex_shader_module};
 
 impl App {
@@ -78,23 +78,28 @@ impl App {
 
     pub fn new_frame_start(&mut self) -> bool {
         let frame_start_moments = &mut self.logic_items.frame_start_moments;
+        let now = Instant::now();
+        let duration_since_last_start = now.duration_since(*frame_start_moments.back().unwrap());
 
-        let previous_frame_end = &self.render_context.as_ref().unwrap().previous_frame_end;
-        if previous_frame_end.is_some() {
-            if !previous_frame_end.as_ref().unwrap().is_signaled().unwrap() {
-                return false;
-            }
-            if self.durations.render_duration.is_none() {
-                self.durations.render_duration = Some(self.durations.rendering_start.unwrap().elapsed());
-            }
-            if self.durations.total_duration.is_none() {
-                self.durations.total_duration = Some(frame_start_moments.back().unwrap().elapsed())
-            }
+        let previous_frame_render_end = &self.render_context.as_ref().unwrap().previous_frame_render_end;
+        // let previous_frame_logic_end = self.logic_items.previous_frame_logic_end;
+
+        let render_done = previous_frame_render_end.is_none()
+            || (previous_frame_render_end.is_some() && previous_frame_render_end.as_ref().unwrap().is_signaled().unwrap());
+        // let logic_done = previous_frame_logic_end.is_some() && previous_frame_logic_end.unwrap();
+
+        if render_done && self.frame_duration.render_gpu_duration.is_none() {
+            self.frame_duration.render_gpu_duration = Some();
         }
 
-        let now = Instant::now();
+        // if logic_done && self.frame_duration.logic_duration.is_none() {
+        //     self.frame_duration.logic_duration = Some(
+        //         duration_since_last_start
+        //             - self.frame_duration.frame_prep_duration.unwrap()
+        //     );
+        // }
 
-        if now.duration_since(*frame_start_moments.back().unwrap()) > self.logic_items.min_frame_duration {
+        if render_done && duration_since_last_start > self.logic_items.min_frame_duration {
             frame_start_moments.push_back(now);
             frame_start_moments.pop_front();
             return true;
@@ -124,23 +129,28 @@ impl App {
         projection * (view * model)
     }
 
-    pub fn frame_logic(&mut self) {
+    pub fn frame_logic(&mut self, logic_image_index: u32) {
         let frame_duration = self.get_frame_duration();
 
         self.handle_input(frame_duration);
 
+        if self.logic_items.vertex_shader_uniform_buffers.is_empty() {
+            for _ in 0..=1 {
+                self.logic_items.vertex_shader_uniform_buffers.push(self.uniform_buffer_allocator.allocate_sized().unwrap());
+                self.logic_items.fragment_shader_uniform_buffers.push(self.uniform_buffer_allocator.allocate_sized().unwrap());
+            }
+        }
+
         let vertex_data = vertex_shader_module::VertexData {
             mvp: self.make_mvp_matrix().to_cols_array_2d(),
         };
-        self.logic_items.vertex_shader_uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
-        *self.logic_items.vertex_shader_uniform_buffer.as_mut().unwrap().write().unwrap() = vertex_data;
+        *self.logic_items.vertex_shader_uniform_buffers[logic_image_index as usize].write().unwrap() = vertex_data;
         
         let fragment_data = fragment_shader_module::FragmentData {
             light_pos: self.logic_items.light_pos.to_array().into(),
             eye_pos: self.logic_items.eye_pos.to_array(),
         };
-        self.logic_items.fragment_shader_uniform_buffer = Some(self.uniform_buffer_allocator.allocate_sized().unwrap());
-        *self.logic_items.fragment_shader_uniform_buffer.as_mut().unwrap().write().unwrap() = fragment_data;
+        *self.logic_items.fragment_shader_uniform_buffers[logic_image_index as usize].write().unwrap() = fragment_data;
 
         self.logic_items.keys_pressed.clear();
     }

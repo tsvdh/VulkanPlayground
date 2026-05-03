@@ -17,7 +17,7 @@ const NUM_BATCHES: u32 = 2u32.pow(14);
 const NUM_VALUES: u32 = BATCH_SIZE * NUM_BATCHES;
 
 fn main() {
-    let VulkanPlayground::CommonItems {
+    let vulkan_playground::CommonItems {
         library: _,
         instance: _,
         debug_callback: _,
@@ -26,7 +26,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, None, QueueFlags::COMPUTE, None);
+    } = vulkan_playground::get_common_vulkan_items(None, None, None, QueueFlags::COMPUTE, None);
 
     let gpu_setup_start = Instant::now();
 

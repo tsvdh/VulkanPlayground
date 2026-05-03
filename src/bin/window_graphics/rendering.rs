@@ -118,7 +118,7 @@ impl App {
             pipeline,
             viewport,
             recreate_swapchain: false,
-            previous_frame_end: None,
+            previous_frame_render_end: None,
         });
     }
 
@@ -129,8 +129,8 @@ impl App {
         if new_window_size.width == 0 {
             return None;
         }
-        if render_context.previous_frame_end.is_some() {
-            render_context.previous_frame_end.as_mut().unwrap().cleanup_finished();
+        if render_context.previous_frame_render_end.is_some() {
+            render_context.previous_frame_render_end.as_mut().unwrap().cleanup_finished();
         }
 
         if render_context.recreate_swapchain {
@@ -177,8 +177,8 @@ impl App {
             self.vulkan_items.descriptor_set_allocator.clone(),
             descriptor_set_layout.clone(),
             [
-                WriteDescriptorSet::buffer(0, self.logic_items.vertex_shader_uniform_buffer.as_ref().unwrap().clone()),
-                WriteDescriptorSet::buffer(1, self.logic_items.fragment_shader_uniform_buffer.as_ref().unwrap().clone())
+                WriteDescriptorSet::buffer(0, self.logic_items.vertex_shader_uniform_buffers[image_index as usize].clone()),
+                WriteDescriptorSet::buffer(1, self.logic_items.fragment_shader_uniform_buffers[image_index as usize].clone())
             ],
             []
         ).unwrap();
@@ -233,13 +233,13 @@ impl App {
 
         match complete_future.map_err(Validated::unwrap) {
             Ok(future) => {
-                render_context.previous_frame_end = Some(future);
+                render_context.previous_frame_render_end = Some(future);
             }
             Err(error) => {
                 if error == VulkanError::OutOfDate {
                     render_context.recreate_swapchain = true;
                 }
-                render_context.previous_frame_end = None;
+                render_context.previous_frame_render_end = None;
 
                 warn!("Rendering failed: {error}");
             }

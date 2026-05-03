@@ -17,7 +17,7 @@ use vulkano::sync::GpuFuture;
 const RESOLUTION: [u32; 2] = [8 * 128, 8 * 128];
 
 fn main() {
-    let VulkanPlayground::CommonItems {
+    let vulkan_playground::CommonItems {
         library: _,
         instance: _,
         debug_callback: _,
@@ -26,7 +26,7 @@ fn main() {
         memory_allocator,
         descriptor_set_allocator,
         command_buffer_allocator
-    } = VulkanPlayground::get_common_vulkan_items(None, None, None, QueueFlags::GRAPHICS, None);
+    } = vulkan_playground::get_common_vulkan_items(None, None, None, QueueFlags::GRAPHICS, None);
 
     mod image_shader_module {
         vulkano_shaders::shader!{
